@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, Trash2, ArrowRight } from 'lucide-react'
-import { useTransfers, useCreateTransfer, useWarehouses, useProducts, useStock } from '../hooks/useApi'
+import { useTransfers, useCreateTransfer, useUpdateTransferStatus, useWarehouses, useProducts, useStock } from '../hooks/useApi'
 import { DataTable, Modal, PageHeader, LoadingSpinner, StatusBadge } from '../components/ui'
 import { format } from 'date-fns'
 
@@ -22,6 +22,9 @@ export default function TransfersPage() {
   const { data: products = [] } = useProducts()
   const { data: stockBalances = [] } = useStock()
   const { mutate: createTransfer, isPending } = useCreateTransfer()
+  const { mutate: updateStatus } = useUpdateTransferStatus()
+
+  const handleStatusChange = (id: number, status: string) => updateStatus({ id, status })
 
   const fromWarehouse = warehouses.find((w: any) => String(w.id) === form.fromWarehouseId) as any
   const toWarehouse = warehouses.find((w: any) => String(w.id) === form.toWarehouseId) as any
@@ -46,10 +49,6 @@ export default function TransfersPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    if (form.fromWarehouseId === form.toWarehouseId) {
-      setError('Source and destination warehouses must be different.')
-      return
-    }
     const validItems = items.filter(i => i.productId && i.fromLocationId && i.toLocationId && i.quantity)
     if (!validItems.length) { setError('Add at least one complete item.'); return }
 
@@ -88,6 +87,16 @@ export default function TransfersPage() {
       <span className="badge-blue">{t.transfer_items?.length || 0} products</span>
     )},
     { key: 'status', header: 'Status', render: (t: any) => <StatusBadge status={t.status || 'draft'} /> },
+    { key: 'statusAction', header: '', align: 'right' as const, render: (t: any) => {
+      if (t.status === 'done' || t.status === 'cancelled') {
+        return t.status === 'done' ? (
+          <button onClick={() => handleStatusChange(t.id, 'cancelled')} className="text-xs text-red-500 hover:underline">Cancel</button>
+        ) : null
+      }
+      return (
+        <button onClick={() => handleStatusChange(t.id, 'done')} className="text-xs font-medium text-emerald-600 hover:underline">Mark Done</button>
+      )
+    }},
   ]
 
   if (isLoading) return <LoadingSpinner />

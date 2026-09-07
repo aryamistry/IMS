@@ -11,6 +11,8 @@ import stockRoutes from "./routes/stock.routes";
 import warehouseRoutes from "./routes/warehouse.routes";
 import supplierRoutes from "./routes/supplier.routes";
 import categoryRoutes from "./routes/category.routes";
+import unitsRoutes from "./routes/units.routes";
+import adjustmentRoutes from "./routes/adjustment.routes";
 
 dotenv.config();
 
@@ -43,6 +45,8 @@ app.use("/api/stock", stockRoutes);
 app.use("/api/warehouses", warehouseRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/categories", categoryRoutes);
+app.use("/api/units", unitsRoutes);
+app.use("/api/adjustments", adjustmentRoutes);
 
 // Health check
 app.get("/api/health", (_req: Request, res: Response) => {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, ChevronDown } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { useReceipts, useCreateReceipt, useUpdateReceipt, useUpdateReceiptStatus, useWarehouses, useSuppliers, useProducts } from '../hooks/useApi'
 import { DataTable, Modal, PageHeader, LoadingSpinner, StatusBadge } from '../components/ui'
 import { format } from 'date-fns'
@@ -12,14 +12,6 @@ interface LineItem {
   unitCost: string
 }
 
-// ...
-const STATUS_OPTIONS = [
-  { value: 'draft', label: 'Draft' },
-  { value: 'waiting', label: 'Waiting' },
-  { value: 'ready', label: 'Ready' },
-  { value: 'done', label: 'Done' },
-  { value: 'cancelled', label: 'Cancelled' },
-]
 
 export default function ReceiptsPage() {
   const [showModal, setShowModal] = useState(false)
@@ -37,6 +29,8 @@ export default function ReceiptsPage() {
   const { mutate: updateStatus } = useUpdateReceiptStatus()
   
   const isPending = isCreating || isUpdating
+
+  const handleStatusChange = (id: number, status: string) => updateStatus({ id, status })
 
   const selectedWarehouse = warehouses.find((w: any) => String(w.id) === form.warehouseId)
   const locations = (selectedWarehouse as any)?.locations || []
@@ -107,9 +101,6 @@ export default function ReceiptsPage() {
     }
   }
 
-  const handleStatusChange = (id: number, newStatus: string) => {
-    updateStatus({ id, status: newStatus })
-  }
 
   const columns = [
     { key: 'reference_no', header: 'Reference', render: (r: any) => (
@@ -125,25 +116,17 @@ export default function ReceiptsPage() {
     { key: 'items', header: 'Items', render: (r: any) => (
       <span className="badge-slate">{r.receipt_items?.length || 0} line items</span>
     )},
-    { key: 'status', header: 'Status', render: (r: any) => (
-      <div className="relative inline-block">
-        <select
-          value={r.status || 'draft'}
-          onChange={(e) => handleStatusChange(r.id, e.target.value)}
-          className="appearance-none bg-transparent text-xs font-medium cursor-pointer pr-5 py-0.5 rounded-full border pl-2 focus:outline-none focus:ring-1 focus:ring-slate-300 transition-colors"
-          style={{
-            borderColor: r.status === 'done' ? '#a7f3d0' : r.status === 'cancelled' ? '#fecaca' : r.status === 'ready' ? '#bfdbfe' : r.status === 'waiting' ? '#fde68a' : '#e2e8f0',
-            color: r.status === 'done' ? '#047857' : r.status === 'cancelled' ? '#dc2626' : r.status === 'ready' ? '#1d4ed8' : r.status === 'waiting' ? '#ca8a04' : '#475569',
-            backgroundColor: r.status === 'done' ? '#ecfdf5' : r.status === 'cancelled' ? '#fef2f2' : r.status === 'ready' ? '#eff6ff' : r.status === 'waiting' ? '#fefce8' : '#f8fafc',
-          }}
-        >
-          {STATUS_OPTIONS.map(opt => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-        <ChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none text-slate-400" />
-      </div>
-    )},
+    { key: 'status', header: 'Status', render: (r: any) => <StatusBadge status={r.status || 'draft'} /> },
+    { key: 'statusAction', header: '', align: 'right' as const, render: (r: any) => {
+      if (r.status === 'done' || r.status === 'cancelled') {
+        return r.status === 'done' ? (
+          <button onClick={() => handleStatusChange(r.id, 'cancelled')} className="text-xs text-red-500 hover:underline">Cancel</button>
+        ) : null
+      }
+      return (
+        <button onClick={() => handleStatusChange(r.id, 'done')} className="text-xs font-medium text-emerald-600 hover:underline">Mark Done</button>
+      )
+    }},
     { key: 'user', header: 'Created By', render: (r: any) => (
       <span className="text-slate-500 text-xs">{r.users?.name || '—'}</span>
     )},

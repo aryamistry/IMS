@@ -72,11 +72,16 @@ export default function StockPage() {
       <span className="font-medium text-slate-800">{m.products?.name || '—'}</span>
     )},
     { key: 'moveType', header: 'Type', render: (m: any) => <MoveBadge type={m.move_type || ''} /> },
-    { key: 'quantity', header: 'Quantity', render: (m: any) => (
-      <span className={clsx('font-semibold tabular-nums', Number(m.quantity) > 0 ? 'text-emerald-600' : 'text-red-500')}>
-        {Number(m.quantity) > 0 ? '+' : ''}{Number(m.quantity).toLocaleString()}
-      </span>
-    )},
+    { key: 'quantity', header: 'Quantity', render: (m: any) => {
+      // Bug #6 fix: key sign/colour off move_type
+      const isNegative = m.move_type === 'delivery' || (m.move_type === 'adjustment' && Number(m.quantity) < 0)
+      const displayQty = Math.abs(Number(m.quantity))
+      return (
+        <span className={clsx('font-semibold tabular-nums', isNegative ? 'text-red-500' : 'text-emerald-600')}>
+          {isNegative ? '−' : '+'}{displayQty.toLocaleString()}
+        </span>
+      )
+    }},
     { key: 'created_at', header: 'Date & Time', render: (m: any) => (
       <span className="text-slate-500 text-xs">
         {(() => { try { return format(new Date(m.created_at), 'MMM d, yyyy HH:mm') } catch { return '—' } })()}

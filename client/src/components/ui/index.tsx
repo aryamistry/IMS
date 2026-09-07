@@ -239,10 +239,16 @@ export function MoveBadge({ type }: { type: string }) {
 }
 
 export function StatusBadge({ status }: { status: string }) {
+  // Bug #7 fix: include all actual enum values used by the system
   const map: Record<string, string> = {
+    draft: 'badge-slate',
+    waiting: 'badge-orange',
+    ready: 'badge-blue',
+    done: 'badge-green',
+    cancelled: 'badge-red',
+    // legacy aliases
     completed: 'badge-green',
     pending: 'badge-orange',
-    cancelled: 'badge-red',
   }
   return (
     <span className={map[status] || 'badge-slate'}>

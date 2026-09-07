@@ -97,6 +97,8 @@ export const useUpdateReceiptStatus = () => {
       api.put(`/receipts/${id}/status`, { status }).then(r => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['receipts'] })
+      qc.invalidateQueries({ queryKey: ['stock'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
     },
   })
 }
@@ -139,6 +141,8 @@ export const useUpdateDeliveryStatus = () => {
       api.put(`/deliveries/${id}/status`, { status }).then(r => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['deliveries'] })
+      qc.invalidateQueries({ queryKey: ['stock'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
     },
   })
 }
@@ -154,6 +158,20 @@ export const useCreateTransfer = () => {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: any) => api.post('/transfers', data).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['transfers'] })
+      qc.invalidateQueries({ queryKey: ['stock'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+// Issue A fix: expose status transitions for transfers
+export const useUpdateTransferStatus = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, status }: { id: number; status: string }) =>
+      api.put(`/transfers/${id}/status`, { status }).then(r => r.data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transfers'] })
       qc.invalidateQueries({ queryKey: ['stock'] })
@@ -218,3 +236,49 @@ export const useCategories = () =>
     queryKey: ['categories'],
     queryFn: () => api.get('/categories').then(r => r.data),
   })
+
+// Bug #3 fix: Units of Measure
+export const useUnits = () =>
+  useQuery({
+    queryKey: ['units'],
+    queryFn: () => api.get('/units').then(r => r.data),
+  })
+
+export const useCreateUnit = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: { unitName: string; symbol: string }) =>
+      api.post('/units', data).then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['units'] }),
+  })
+}
+
+// Bug #4 fix: Adjustments
+export const useAdjustments = () =>
+  useQuery({
+    queryKey: ['adjustments'],
+    queryFn: () => api.get('/adjustments').then(r => r.data),
+  })
+
+export const useCreateAdjustment = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: any) => api.post('/adjustments', data).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['adjustments'] })
+      qc.invalidateQueries({ queryKey: ['stock'] })
+      qc.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}
+
+// Bug #10 fix: Create Location under a Warehouse
+export const useCreateLocation = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ warehouseId, locationCode, description }: { warehouseId: number; locationCode: string; description?: string }) =>
+      api.post(`/warehouses/${warehouseId}/locations`, { locationCode, description }).then(r => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['warehouses'] }),
+  })
+}
+

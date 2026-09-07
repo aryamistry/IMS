@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, Trash2, Edit2 } from 'lucide-react'
-import { useDeliveries, useCreateDelivery, useUpdateDelivery, useWarehouses, useProducts, useStock } from '../hooks/useApi'
+import { useDeliveries, useCreateDelivery, useUpdateDelivery, useUpdateDeliveryStatus, useWarehouses, useProducts, useStock } from '../hooks/useApi'
 import { DataTable, Modal, PageHeader, LoadingSpinner, StatusBadge } from '../components/ui'
 import { format } from 'date-fns'
 
@@ -23,7 +23,10 @@ export default function DeliveriesPage() {
   const { data: stockBalances = [] } = useStock()
   const { mutate: createDelivery, isPending: isCreating } = useCreateDelivery()
   const { mutate: updateDelivery, isPending: isUpdating } = useUpdateDelivery()
+  const { mutate: updateStatus } = useUpdateDeliveryStatus()
   const isPending = isCreating || isUpdating
+
+  const handleStatusChange = (id: number, status: string) => updateStatus({ id, status })
 
   const selectedWarehouse = warehouses.find((w: any) => String(w.id) === form.warehouseId)
   const locations = (selectedWarehouse as any)?.locations || []
@@ -108,6 +111,16 @@ export default function DeliveriesPage() {
       <span className="badge-slate">{d.delivery_items?.length || 0} line items</span>
     )},
     { key: 'status', header: 'Status', render: (d: any) => <StatusBadge status={d.status || 'draft'} /> },
+    { key: 'statusAction', header: '', align: 'right' as const, render: (d: any) => {
+      if (d.status === 'done' || d.status === 'cancelled') {
+        return d.status === 'done' ? (
+          <button onClick={() => handleStatusChange(d.id, 'cancelled')} className="text-xs text-red-500 hover:underline">Cancel</button>
+        ) : null
+      }
+      return (
+        <button onClick={() => handleStatusChange(d.id, 'done')} className="text-xs font-medium text-emerald-600 hover:underline">Mark Done</button>
+      )
+    }},
     { key: 'user', header: 'Created By', render: (d: any) => (
       <span className="text-slate-500 text-xs">{d.users?.name || '—'}</span>
     )},
@@ -157,7 +170,7 @@ export default function DeliveriesPage() {
             </div>
             <div>
               <label className="label">Date *</label>
-              <input className="input" type="date" min={new Date().toISOString().split('T')[0]} value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} required />
+              <input className="input" type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} required />
             </div>
             <div className="col-span-2">
               <label className="label">Notes</label>

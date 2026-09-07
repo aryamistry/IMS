@@ -1,4 +1,4 @@
-import { Package, Warehouse, Users, BarChart3, AlertTriangle, TrendingUp } from 'lucide-react'
+import { Package, Warehouse, Users, BarChart3, AlertTriangle, TrendingUp, ClipboardList, Truck, ArrowLeftRight } from 'lucide-react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend
@@ -55,6 +55,31 @@ export default function DashboardPage() {
           icon={<Warehouse className="w-5 h-5 text-blue-700" />}
           iconBg="bg-blue-50"
           subtitle={`${stats.totalSuppliers} active suppliers`}
+        />
+      </div>
+
+      {/* Bug #8 fix: Pending KPIs required by PS */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <StatCard
+          title="Pending Receipts"
+          value={stats.pendingReceipts ?? 0}
+          icon={<ClipboardList className="w-5 h-5 text-violet-700" />}
+          iconBg="bg-violet-50"
+          subtitle="Draft / Waiting / Ready"
+        />
+        <StatCard
+          title="Pending Deliveries"
+          value={stats.pendingDeliveries ?? 0}
+          icon={<Truck className="w-5 h-5 text-amber-700" />}
+          iconBg="bg-amber-50"
+          subtitle="Draft / Waiting / Ready"
+        />
+        <StatCard
+          title="Transfers Scheduled"
+          value={stats.pendingTransfers ?? 0}
+          icon={<ArrowLeftRight className="w-5 h-5 text-sky-700" />}
+          iconBg="bg-sky-50"
+          subtitle="Draft / Waiting / Ready"
         />
       </div>
 
@@ -195,8 +220,15 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="text-right flex-shrink-0">
-                  <p className={`text-sm font-semibold ${Number(move.quantity) > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                    {Number(move.quantity) > 0 ? '+' : ''}{Number(move.quantity).toLocaleString()}
+                  {/* Bug #6 fix: key sign/colour off move_type, not raw quantity */}
+                  <p className={`text-sm font-semibold ${
+                    move.move_type === 'delivery' ? 'text-red-500' :
+                    move.move_type === 'receipt' ? 'text-emerald-600' :
+                    move.move_type === 'adjustment' && Number(move.quantity) < 0 ? 'text-red-500' :
+                    move.move_type === 'adjustment' && Number(move.quantity) > 0 ? 'text-emerald-600' :
+                    'text-blue-600'
+                  }`}>
+                    {move.move_type === 'delivery' ? '−' : '+'}{Math.abs(Number(move.quantity)).toLocaleString()}
                   </p>
                   <p className="text-[10px] text-slate-400 mt-0.5">
                     {(() => {

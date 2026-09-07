@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Package, ClipboardList, Truck,
   ArrowLeftRight, BarChart3, Users, Settings,
-  Warehouse, LogOut, ChevronRight
+  Warehouse, LogOut, ChevronRight, SlidersHorizontal
 } from 'lucide-react'
 import { useAuthStore } from '../../store/auth.store'
 import clsx from 'clsx'
@@ -13,6 +13,7 @@ const navItems = [
   { to: '/receipts', icon: ClipboardList, label: 'Receipts' },
   { to: '/deliveries', icon: Truck, label: 'Deliveries' },
   { to: '/transfers', icon: ArrowLeftRight, label: 'Transfers' },
+  { to: '/adjustments', icon: SlidersHorizontal, label: 'Adjustments' },
   { to: '/stock', icon: BarChart3, label: 'Stock' },
   { to: '/suppliers', icon: Users, label: 'Suppliers' },
 ]

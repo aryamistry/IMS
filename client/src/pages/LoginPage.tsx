@@ -5,8 +5,8 @@ import { useLogin } from '../hooks/useApi'
 import { useAuthStore } from '../store/auth.store'
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('admin@warehouse.com')
-  const [password, setPassword] = useState('password123')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
 
@@ -156,12 +156,15 @@ export default function LoginPage() {
                 'Sign in'
               )}
             </button>
-          </form>
+            </form>
 
-          <p className="text-slate-600 text-xs text-center mt-8">
-            Demo: admin@warehouse.com / password123
-          </p>
-          <p className="text-center text-sm text-slate-500 mt-4">
+          <div className="text-center mt-4">
+            <a href="/forgot-password" className="text-slate-400 hover:text-slate-200 text-sm transition-colors">
+              Forgot password?
+            </a>
+          </div>
+
+          <p className="text-center text-sm text-slate-500 mt-3">
             Don't have an account?{' '}
             <a href="/register" className="text-white hover:underline font-medium">
               Create an account

@@ -76,21 +76,28 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
     const { id } = req.params;
     const productId = parseInt(id);
 
-    // Use a transaction to delete all related records first, then the product
+    // Bug #5 fix: protect audit trail — block deletion if product appears in any historical document
+    const [receiptItems, deliveryItems, transferItems] = await Promise.all([
+      prisma.receiptItem.count({ where: { product_id: productId } }),
+      prisma.deliveryItem.count({ where: { product_id: productId } }),
+      prisma.transferItem.count({ where: { product_id: productId } }),
+    ]);
+
+    if (receiptItems + deliveryItems + transferItems > 0) {
+      res.status(409).json({
+        error:
+          'Cannot delete this product — it appears in historical receipts, deliveries, or transfers. ' +
+          'Deleting it would corrupt the stock ledger. ' +
+          'If you no longer need it, update its name/SKU to mark it as discontinued instead.',
+      });
+      return;
+    }
+
+    // Safe to hard-delete: no historical records exist
     await prisma.$transaction(async (tx) => {
-      // Delete related stock moves
       await tx.stockMove.deleteMany({ where: { product_id: productId } });
-      // Delete related stock balances
       await tx.stockBalance.deleteMany({ where: { product_id: productId } });
-      // Delete related receipt items
-      await tx.receiptItem.deleteMany({ where: { product_id: productId } });
-      // Delete related delivery items
-      await tx.deliveryItem.deleteMany({ where: { product_id: productId } });
-      // Delete related transfer items
-      await tx.transferItem.deleteMany({ where: { product_id: productId } });
-      // Delete related adjustment items
       await tx.adjustmentItem.deleteMany({ where: { product_id: productId } });
-      // Finally delete the product
       await tx.product.delete({ where: { id: productId } });
     });
 
@@ -101,6 +108,7 @@ export const deleteProduct = async (req: Request, res: Response): Promise<void> 
       res.status(404).json({ error: 'Product not found' });
       return;
     }
-    res.status(500).json({ error: 'Failed to delete product. It may be referenced by other records.' });
+    res.status(500).json({ error: 'Failed to delete product.' });
   }
 };
+

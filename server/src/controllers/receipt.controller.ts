@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/prisma';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { receipts_status } from '@prisma/client';
 
 export const getReceipts = async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -42,9 +43,57 @@ export const getReceiptById = async (req: Request, res: Response): Promise<void>
   }
 };
 
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+/** Commit stock into the warehouse for a set of receipt items. */
+async function applyReceiptStock(
+  tx: Omit<typeof prisma, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>,
+  receiptId: number,
+  items: Array<{ productId: number; locationId: number; quantity: number }>,
+) {
+  for (const item of items) {
+    await tx.stockBalance.upsert({
+      where: { product_id_location_id: { product_id: item.productId, location_id: item.locationId } },
+      update: { quantity: { increment: item.quantity } },
+      create: { product_id: item.productId, location_id: item.locationId, quantity: item.quantity },
+    });
+    await tx.stockMove.create({
+      data: {
+        product_id: item.productId,
+        to_location: item.locationId,
+        quantity: item.quantity,
+        move_type: 'receipt',
+        reference_table: 'receipts',
+        reference_id: receiptId,
+      },
+    });
+  }
+}
+
+/** Reverse (undo) previously committed stock for a receipt. */
+async function reverseReceiptStock(
+  tx: Omit<typeof prisma, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>,
+  receiptId: number,
+  items: Array<{ product_id: number | null; location_id: number | null; quantity: any }>,
+) {
+  for (const item of items) {
+    if (item.product_id && item.location_id && item.quantity) {
+      await tx.stockBalance.updateMany({
+        where: { product_id: item.product_id, location_id: item.location_id },
+        data: { quantity: { decrement: item.quantity } },
+      });
+    }
+  }
+  await tx.stockMove.deleteMany({
+    where: { reference_table: 'receipts', reference_id: receiptId },
+  });
+}
+
+// ── controllers ──────────────────────────────────────────────────────────────
+
 export const createReceipt = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { warehouseId, supplierId, date, notes, items } = req.body;
+    const { warehouseId, supplierId, date, notes, items, status: requestedStatus } = req.body;
     const userId = req.user!.id;
 
     if (!warehouseId || !supplierId || !date || !items?.length) {
@@ -52,10 +101,13 @@ export const createReceipt = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
+    // Default to 'draft'; caller may explicitly pass 'done' to commit stock immediately.
+    const validStatuses = ['draft', 'waiting', 'ready', 'done'];
+    const initialStatus: string = validStatuses.includes(requestedStatus) ? requestedStatus : 'draft';
+
     const reference = `REC-${Date.now()}`;
 
     const receipt = await prisma.$transaction(async (tx) => {
-      // Create receipt
       const newReceipt = await tx.receipt.create({
         data: {
           reference_no: reference,
@@ -63,7 +115,7 @@ export const createReceipt = async (req: AuthRequest, res: Response): Promise<vo
           supplier_id: supplierId,
           created_by: userId,
           created_at: new Date(date),
-          status: 'done',
+          status: initialStatus as receipts_status,
           receipt_items: {
             create: items.map((item: any) => ({
               product_id: item.productId,
@@ -79,33 +131,9 @@ export const createReceipt = async (req: AuthRequest, res: Response): Promise<vo
         },
       });
 
-      // Update stock balances and record stock moves
-      for (const item of items) {
-        await tx.stockBalance.upsert({
-          where: {
-            product_id_location_id: {
-              product_id: item.productId,
-              location_id: item.locationId,
-            },
-          },
-          update: { quantity: { increment: item.quantity } },
-          create: {
-            product_id: item.productId,
-            location_id: item.locationId,
-            quantity: item.quantity,
-          },
-        });
-
-        await tx.stockMove.create({
-          data: {
-            product_id: item.productId,
-            to_location: item.locationId,
-            quantity: item.quantity,
-            move_type: 'receipt',
-            reference_table: 'receipts',
-            reference_id: newReceipt.id,
-          },
-        });
+      // Only commit stock when status starts as 'done'
+      if (initialStatus === 'done') {
+        await applyReceiptStock(tx, newReceipt.id, items);
       }
 
       return newReceipt;
@@ -122,22 +150,68 @@ export const updateReceiptStatus = async (req: Request, res: Response): Promise<
   try {
     const { id } = req.params;
     const { status } = req.body;
+    const receiptId = parseInt(id);
 
-    const validStatuses = ['draft', 'waiting', 'ready', 'done', 'cancelled'];
-    if (!status || !validStatuses.includes(status)) {
-      res.status(400).json({ error: `Status must be one of: ${validStatuses.join(', ')}` });
+    const allStatuses = ['draft', 'waiting', 'ready', 'done', 'cancelled'];
+    if (!status || !allStatuses.includes(status)) {
+      res.status(400).json({ error: `Status must be one of: ${allStatuses.join(', ')}` });
       return;
     }
 
-    const receipt = await prisma.receipt.update({
-      where: { id: parseInt(id) },
-      data: { status },
-      include: {
-        warehouses: true,
-        suppliers: true,
-        users: { select: { id: true, name: true } },
-        receipt_items: { include: { products: true, locations: true } },
-      },
+    const existing = await prisma.receipt.findUnique({
+      where: { id: receiptId },
+      include: { receipt_items: true },
+    });
+    if (!existing) {
+      res.status(404).json({ error: 'Receipt not found' });
+      return;
+    }
+
+    // Cannot transition OUT of cancelled
+    if (existing.status === 'cancelled') {
+      res.status(409).json({ error: 'A cancelled receipt cannot be reopened.' });
+      return;
+    }
+
+    // Cannot make any change once done EXCEPT cancelling
+    if (existing.status === 'done' && status !== 'cancelled') {
+      res.status(409).json({
+        error: 'A done receipt can only be cancelled. Create a stock adjustment to correct quantities.',
+      });
+      return;
+    }
+
+    const receipt = await prisma.$transaction(async (tx) => {
+      const wasNotDone = existing.status !== 'done';
+      const becomingDone = status === 'done';
+      const becomingCancelled = status === 'cancelled';
+      const wasDone = existing.status === 'done';
+
+      // Transitioning INTO done → commit stock
+      if (wasNotDone && becomingDone) {
+        const items = existing.receipt_items.map((i) => ({
+          productId: i.product_id!,
+          locationId: i.location_id!,
+          quantity: Number(i.quantity),
+        }));
+        await applyReceiptStock(tx, receiptId, items);
+      }
+
+      // Transitioning INTO cancelled FROM done → reverse stock
+      if (wasDone && becomingCancelled) {
+        await reverseReceiptStock(tx, receiptId, existing.receipt_items);
+      }
+
+      return tx.receipt.update({
+        where: { id: receiptId },
+        data: { status },
+        include: {
+          warehouses: true,
+          suppliers: true,
+          users: { select: { id: true, name: true } },
+          receipt_items: { include: { products: true, locations: true } },
+        },
+      });
     });
 
     res.json(receipt);
@@ -155,7 +229,7 @@ export const updateReceipt = async (req: AuthRequest, res: Response): Promise<vo
   try {
     const { id } = req.params;
     const { warehouseId, supplierId, date, notes, items } = req.body;
-    
+
     if (!warehouseId || !supplierId || !date || !items?.length) {
       res.status(400).json({ error: 'warehouseId, supplierId, date, and items are required' });
       return;
@@ -163,37 +237,24 @@ export const updateReceipt = async (req: AuthRequest, res: Response): Promise<vo
 
     const receiptId = parseInt(id);
 
+    const receiptCheck = await prisma.receipt.findUnique({ where: { id: receiptId } });
+    if (!receiptCheck) {
+      res.status(404).json({ error: 'Receipt not found' });
+      return;
+    }
+    // Block edits on finalised receipts
+    if (receiptCheck.status === 'done' || receiptCheck.status === 'cancelled') {
+      res.status(409).json({
+        error: `Cannot edit a ${receiptCheck.status} receipt. Create a stock adjustment to correct stock levels.`,
+      });
+      return;
+    }
+
+    // Only draft/waiting/ready can be edited — no stock moves exist yet, so just swap the items
     const updatedReceipt = await prisma.$transaction(async (tx) => {
-      // 1. Get old items
-      const oldReceipt = await tx.receipt.findUnique({
-        where: { id: receiptId },
-        include: { receipt_items: true }
-      });
+      await tx.receiptItem.deleteMany({ where: { receipt_id: receiptId } });
 
-      if (!oldReceipt) throw new Error('NOT_FOUND');
-
-      // 2. Reverse old stock changes
-      for (const oldItem of oldReceipt.receipt_items) {
-        if (oldItem.product_id && oldItem.location_id && oldItem.quantity) {
-          await tx.stockBalance.updateMany({
-            where: { product_id: oldItem.product_id, location_id: oldItem.location_id },
-            data: { quantity: { decrement: oldItem.quantity } }
-          });
-        }
-      }
-      
-      // Delete old stock moves tied to this receipt
-      await tx.stockMove.deleteMany({
-        where: { reference_table: 'receipts', reference_id: receiptId }
-      });
-
-      // Delete old items
-      await tx.receiptItem.deleteMany({
-        where: { receipt_id: receiptId }
-      });
-
-      // 3. Update receipt header and add new items
-      const newReceipt = await tx.receipt.update({
+      return tx.receipt.update({
         where: { id: receiptId },
         data: {
           warehouse_id: parseInt(warehouseId),
@@ -204,55 +265,19 @@ export const updateReceipt = async (req: AuthRequest, res: Response): Promise<vo
               product_id: parseInt(item.productId),
               location_id: parseInt(item.locationId),
               quantity: parseFloat(item.quantity),
-            }))
-          }
+            })),
+          },
         },
         include: {
           receipt_items: { include: { products: true, locations: true } },
           warehouses: true,
           suppliers: true,
-        }
+        },
       });
-
-      // 4. Apply new stock changes
-      for (const item of items) {
-        const itemQuantity = parseFloat(item.quantity);
-        const stockBalance = await tx.stockBalance.findFirst({
-          where: { product_id: parseInt(item.productId), location_id: parseInt(item.locationId) }
-        });
-        
-        if (stockBalance) {
-          await tx.stockBalance.update({
-            where: { id: stockBalance.id },
-            data: { quantity: { increment: itemQuantity } }
-          });
-        } else {
-          await tx.stockBalance.create({
-            data: { product_id: parseInt(item.productId), location_id: parseInt(item.locationId), quantity: itemQuantity }
-          });
-        }
-
-        await tx.stockMove.create({
-          data: {
-            product_id: parseInt(item.productId),
-            to_location: parseInt(item.locationId),
-            quantity: itemQuantity,
-            move_type: 'receipt',
-            reference_table: 'receipts',
-            reference_id: receiptId
-          }
-        });
-      }
-
-      return newReceipt;
     });
 
     res.json(updatedReceipt);
   } catch (error: any) {
-    if (error.message === 'NOT_FOUND') {
-      res.status(404).json({ error: 'Receipt not found' });
-      return;
-    }
     console.error('Update receipt error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }

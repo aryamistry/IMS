@@ -20,6 +20,7 @@ model User {
   delivery_orders DeliveryOrder[]
   receipts        Receipt[]
   transfers       Transfer[]
+  passwordResets  PasswordReset[]
   roles           Role?           @relation(fields: [role_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "users_ibfk_1")
   warehouses      Warehouse[]
 
@@ -328,4 +329,17 @@ enum stock_moves_move_type {
   delivery
   transfer
   adjustment
+}
+
+// Issue E: OTP password reset
+model PasswordReset {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  otp        String   @db.VarChar(6)
+  expires_at DateTime
+  used       Boolean  @default(false)
+  created_at DateTime @default(now())
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("password_resets")
 }

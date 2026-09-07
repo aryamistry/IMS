@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react'
-import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useCategories } from '../hooks/useApi'
+import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useCategories, useUnits, useCreateUnit } from '../hooks/useApi'
 import { DataTable, Modal, PageHeader, LoadingSpinner } from '../components/ui'
 import type { Product } from '../types'
 
@@ -9,21 +9,19 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<Product | null>(null)
   const [form, setForm] = useState({ name: '', sku: '', description: '', categoryId: '', unitId: '', reorderLevel: '0' })
   const [error, setError] = useState('')
+  // Issue D: inline new-unit form
+  const [addingUnit, setAddingUnit] = useState(false)
+  const [newUnit, setNewUnit] = useState({ unitName: '', symbol: '' })
+  const [unitError, setUnitError] = useState('')
 
   const { data: products = [], isLoading } = useProducts()
   const { data: categories = [] } = useCategories()
+  // Bug #3 fix: fetch units from API instead of scanning existing products
+  const { data: units = [] } = useUnits()
+  const { mutate: createUnit, isPending: savingUnit } = useCreateUnit()
   const { mutate: createProduct, isPending: creating } = useCreateProduct()
   const { mutate: updateProduct, isPending: updating } = useUpdateProduct()
   const { mutate: deleteProduct } = useDeleteProduct()
-
-  // Collect unique units from products
-  const unitsMap = new Map<number, { id: number; unit_name: string; symbol: string }>()
-  products.forEach((p: any) => {
-    if (p.units_of_measure && p.units_of_measure.id) {
-      unitsMap.set(p.units_of_measure.id, p.units_of_measure)
-    }
-  })
-  const units = Array.from(unitsMap.values())
 
   const openCreate = () => {
     setEditing(null)
@@ -169,10 +167,57 @@ export default function ProductsPage() {
             </div>
             <div>
               <label className="label">Unit of Measure *</label>
-              <select className="input" value={form.unitId} onChange={e => setForm(f => ({ ...f, unitId: e.target.value }))} required>
+              <select
+                className="input"
+                value={addingUnit ? '__new__' : form.unitId}
+                onChange={e => {
+                  if (e.target.value === '__new__') { setAddingUnit(true); setUnitError('') }
+                  else { setAddingUnit(false); setForm(f => ({ ...f, unitId: e.target.value })) }
+                }}
+                required={!addingUnit}
+              >
                 <option value="">Select unit</option>
-                {units.map(u => <option key={u.id} value={u.id}>{u.unit_name} ({u.symbol})</option>)}
+                {units.map((u: any) => <option key={u.id} value={u.id}>{u.unit_name} ({u.symbol})</option>)}
+                <option value="__new__">➕ Add new unit…</option>
               </select>
+              {addingUnit && (
+                <div className="mt-2 space-y-2">
+                  {unitError && <p className="text-xs text-red-500">{unitError}</p>}
+                  <div className="flex gap-2">
+                    <input
+                      className="input flex-1 text-sm"
+                      placeholder="Name (e.g. Kilogram)"
+                      value={newUnit.unitName}
+                      onChange={e => setNewUnit(n => ({ ...n, unitName: e.target.value }))}
+                    />
+                    <input
+                      className="input w-24 text-sm font-mono"
+                      placeholder="Symbol"
+                      value={newUnit.symbol}
+                      onChange={e => setNewUnit(n => ({ ...n, symbol: e.target.value }))}
+                    />
+                    <button
+                      type="button"
+                      className="btn-primary text-sm py-1.5"
+                      disabled={savingUnit}
+                      onClick={() => {
+                        if (!newUnit.unitName || !newUnit.symbol) { setUnitError('Name and symbol are required'); return }
+                        createUnit(newUnit, {
+                          onSuccess: (created: any) => {
+                            setForm(f => ({ ...f, unitId: String(created.id) }))
+                            setAddingUnit(false)
+                            setNewUnit({ unitName: '', symbol: '' })
+                          },
+                          onError: (err: any) => setUnitError(err.response?.data?.error || 'Failed'),
+                        })
+                      }}
+                    >
+                      {savingUnit ? '...' : 'Save'}
+                    </button>
+                    <button type="button" className="btn-secondary text-sm py-1.5" onClick={() => setAddingUnit(false)}>Cancel</button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

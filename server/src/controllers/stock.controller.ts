@@ -64,6 +64,9 @@ export const getDashboardStats = async (_req: Request, res: Response): Promise<v
       totalSuppliers,
       recentMoves,
       stockSummary,
+      pendingReceipts,
+      pendingDeliveries,
+      pendingTransfers,
     ] = await Promise.all([
       prisma.product.count(),
       prisma.warehouse.count(),
@@ -76,6 +79,10 @@ export const getDashboardStats = async (_req: Request, res: Response): Promise<v
         orderBy: { created_at: 'desc' },
       }),
       prisma.stockBalance.aggregate({ _sum: { quantity: true } }),
+      // Bug #8 fix: Pending counts per PS requirement
+      prisma.receipt.count({ where: { status: { in: ['draft', 'waiting', 'ready'] } } }),
+      prisma.deliveryOrder.count({ where: { status: { in: ['draft', 'waiting', 'ready'] } } }),
+      prisma.transfer.count({ where: { status: { in: ['draft', 'waiting', 'ready'] } } }),
     ]);
 
     let lowStockAlerts = 0;
@@ -124,6 +131,9 @@ export const getDashboardStats = async (_req: Request, res: Response): Promise<v
       totalSuppliers,
       totalStock: Number(stockSummary._sum.quantity || 0),
       lowStockAlerts,
+      pendingReceipts,
+      pendingDeliveries,
+      pendingTransfers,
       recentMoves,
       categoryStock,
       movementTrend,

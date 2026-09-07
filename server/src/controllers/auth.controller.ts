@@ -65,12 +65,27 @@ export const register = async (req: Request, res: Response) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Look up the "operator" role by name instead of assuming its id.
+    // Falls back to any non-admin role, then to the first role that exists,
+    // so this doesn't break if roles get re-seeded in a different order.
+    let defaultRole = await prisma.role.findFirst({
+      where: { role_name: "operator" },
+    });
+    if (!defaultRole) {
+      defaultRole = await prisma.role.findFirst({
+        where: { role_name: { not: "admin" } },
+      });
+    }
+    if (!defaultRole) {
+      defaultRole = await prisma.role.findFirst();
+    }
+
     const user = await prisma.user.create({
       data: {
         name,
         email,
         password_hash: hashedPassword,
-        role_id: 1, // default role
+        role_id: defaultRole?.id ?? null,
       },
     });
 
