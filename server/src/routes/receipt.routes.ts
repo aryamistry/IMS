@@ -1,0 +1,11 @@
+import { Router } from 'express';
+import { getReceipts, getReceiptById, createReceipt, updateReceiptStatus, updateReceipt } from '../controllers/receipt.controller';
+import { authenticate } from '../middleware/auth.middleware';
+const router = Router();
+router.use(authenticate as any);
+router.get('/', getReceipts as any);
+router.get('/:id', getReceiptById as any);
+router.post('/', createReceipt as any);
+router.put('/:id', updateReceipt as any);
+router.put('/:id/status', updateReceiptStatus as any);
+export default router;

@@ -1,0 +1,10 @@
+import { Router } from 'express';
+import { getDeliveries, createDelivery, updateDeliveryStatus, updateDelivery } from '../controllers/delivery.controller';
+import { authenticate } from '../middleware/auth.middleware';
+const router = Router();
+router.use(authenticate as any);
+router.get('/', getDeliveries as any);
+router.post('/', createDelivery as any);
+router.put('/:id', updateDelivery as any);
+router.put('/:id/status', updateDeliveryStatus as any);
+export default router;

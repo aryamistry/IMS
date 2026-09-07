@@ -1,0 +1,331 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              Int             @id @default(autoincrement())
+  name            String?         @db.VarChar(100)
+  email           String?         @unique(map: "email") @db.VarChar(100)
+  password_hash   String?         @db.VarChar(255)
+  role_id         Int?
+  is_active       Boolean?        @default(true)
+  created_at      DateTime        @default(now()) @db.Timestamp(0)
+  updated_at      DateTime        @default(now()) @db.Timestamp(0)
+  adjustments     Adjustment[]
+  delivery_orders DeliveryOrder[]
+  receipts        Receipt[]
+  transfers       Transfer[]
+  roles           Role?           @relation(fields: [role_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "users_ibfk_1")
+  warehouses      Warehouse[]
+
+  @@index([role_id], map: "role_id")
+  @@map("users")
+}
+
+model Role {
+  id          Int     @id @default(autoincrement())
+  role_name   String  @db.VarChar(50)
+  description String? @db.Text
+  users       User[]
+
+  @@map("roles")
+}
+
+model ProductCategory {
+  id            Int       @id @default(autoincrement())
+  category_name String    @db.VarChar(100)
+  products      Product[]
+
+  @@map("product_categories")
+}
+
+model UnitOfMeasure {
+  id        Int       @id @default(autoincrement())
+  unit_name String?   @db.VarChar(50)
+  symbol    String?   @db.VarChar(10)
+  products  Product[]
+
+  @@map("units_of_measure")
+}
+
+model Product {
+  id                 Int              @id @default(autoincrement())
+  name               String           @db.VarChar(150)
+  sku                String?          @unique(map: "sku") @db.VarChar(100)
+  category_id        Int?
+  unit_id            Int?
+  reorder_level      Int?             @default(0)
+  description        String?          @db.Text
+  created_at         DateTime         @default(now()) @db.Timestamp(0)
+  updated_at         DateTime         @default(now()) @db.Timestamp(0)
+  adjustment_items   AdjustmentItem[]
+  delivery_items     DeliveryItem[]
+  product_categories ProductCategory? @relation(fields: [category_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "products_ibfk_1")
+  units_of_measure   UnitOfMeasure?   @relation(fields: [unit_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "products_ibfk_2")
+  receipt_items      ReceiptItem[]
+  stock_balances     StockBalance[]
+  stock_moves        StockMove[]
+  transfer_items     TransferItem[]
+
+  @@index([category_id], map: "category_id")
+  @@index([sku], map: "idx_product_sku")
+  @@index([unit_id], map: "unit_id")
+  @@map("products")
+}
+
+model Warehouse {
+  id                                             Int             @id @default(autoincrement())
+  name                                           String?         @db.VarChar(150)
+  short_code                                     String?         @db.VarChar(10)
+  address                                        String?         @db.Text
+  manager_id                                     Int?
+  created_at                                     DateTime        @default(now()) @db.Timestamp(0)
+  updated_at                                     DateTime        @default(now()) @db.Timestamp(0)
+  adjustments                                    Adjustment[]
+  delivery_orders                                DeliveryOrder[]
+  locations                                      Location[]
+  receipts                                       Receipt[]
+  transfers_transfers_from_warehouseTowarehouses Transfer[]      @relation("transfers_from_warehouseTowarehouses")
+  transfers_transfers_to_warehouseTowarehouses   Transfer[]      @relation("transfers_to_warehouseTowarehouses")
+  users                                          User?           @relation(fields: [manager_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "warehouses_ibfk_1")
+
+  @@index([manager_id], map: "manager_id")
+  @@map("warehouses")
+}
+
+model Location {
+  id                                                     Int              @id @default(autoincrement())
+  warehouse_id                                           Int?
+  location_code                                          String?          @db.VarChar(50)
+  description                                            String?          @db.Text
+  updated_at                                             DateTime         @default(now()) @db.Timestamp(0)
+  adjustment_items                                       AdjustmentItem[]
+  delivery_items                                         DeliveryItem[]
+  warehouses                                             Warehouse?       @relation(fields: [warehouse_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "locations_ibfk_1")
+  receipt_items                                          ReceiptItem[]
+  stock_balances                                         StockBalance[]
+  transfer_items_transfer_items_from_locationTolocations TransferItem[]   @relation("transfer_items_from_locationTolocations")
+  transfer_items_transfer_items_to_locationTolocations   TransferItem[]   @relation("transfer_items_to_locationTolocations")
+
+  @@index([warehouse_id], map: "idx_location_warehouse")
+  @@map("locations")
+}
+
+model Supplier {
+  id         Int       @id @default(autoincrement())
+  name       String?   @db.VarChar(150)
+  email      String?   @db.VarChar(100)
+  phone      String?   @db.VarChar(20)
+  address    String?   @db.Text
+  created_at DateTime  @default(now()) @db.Timestamp(0)
+  receipts   Receipt[]
+
+  @@map("suppliers")
+}
+
+model Receipt {
+  id            Int              @id @default(autoincrement())
+  reference_no  String?          @unique(map: "reference_no") @db.VarChar(50)
+  supplier_name String?          @db.VarChar(150)
+  warehouse_id  Int?
+  status        receipts_status? @default(draft)
+  created_by    Int?
+  created_at    DateTime         @default(now()) @db.Timestamp(0)
+  supplier_id   Int?
+  receipt_items ReceiptItem[]
+  suppliers     Supplier?        @relation(fields: [supplier_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_receipt_supplier")
+  warehouses    Warehouse?       @relation(fields: [warehouse_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "receipts_ibfk_1")
+  users         User?            @relation(fields: [created_by], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "receipts_ibfk_2")
+
+  @@index([created_by], map: "created_by")
+  @@index([supplier_id], map: "fk_receipt_supplier")
+  @@index([warehouse_id], map: "idx_receipt_warehouse")
+  @@map("receipts")
+}
+
+model ReceiptItem {
+  id          Int       @id @default(autoincrement())
+  receipt_id  Int?
+  product_id  Int?
+  location_id Int?
+  quantity    Int?
+  receipts    Receipt?  @relation(fields: [receipt_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "receipt_items_ibfk_1")
+  products    Product?  @relation(fields: [product_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "receipt_items_ibfk_2")
+  locations   Location? @relation(fields: [location_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "receipt_items_ibfk_3")
+
+  @@index([location_id], map: "location_id")
+  @@index([product_id], map: "product_id")
+  @@index([receipt_id], map: "receipt_id")
+  @@map("receipt_items")
+}
+
+model DeliveryOrder {
+  id             Int                     @id @default(autoincrement())
+  reference_no   String?                 @unique(map: "reference_no") @db.VarChar(50)
+  customer_name  String?                 @db.VarChar(150)
+  warehouse_id   Int?
+  status         delivery_orders_status? @default(draft)
+  created_by     Int?
+  created_at     DateTime                @default(now()) @db.Timestamp(0)
+  delivery_items DeliveryItem[]
+  warehouses     Warehouse?              @relation(fields: [warehouse_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "delivery_orders_ibfk_1")
+  users          User?                   @relation(fields: [created_by], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "delivery_orders_ibfk_2")
+
+  @@index([created_by], map: "created_by")
+  @@index([warehouse_id], map: "idx_delivery_warehouse")
+  @@map("delivery_orders")
+}
+
+model DeliveryItem {
+  id              Int            @id @default(autoincrement())
+  delivery_id     Int?
+  product_id      Int?
+  location_id     Int?
+  quantity        Int?
+  delivery_orders DeliveryOrder? @relation(fields: [delivery_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "delivery_items_ibfk_1")
+  products        Product?       @relation(fields: [product_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "delivery_items_ibfk_2")
+  locations       Location?      @relation(fields: [location_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "delivery_items_ibfk_3")
+
+  @@index([delivery_id], map: "delivery_id")
+  @@index([location_id], map: "location_id")
+  @@index([product_id], map: "product_id")
+  @@map("delivery_items")
+}
+
+model Transfer {
+  id                                              Int               @id @default(autoincrement())
+  reference_no                                    String?           @unique(map: "reference_no") @db.VarChar(50)
+  from_warehouse                                  Int?
+  to_warehouse                                    Int?
+  status                                          transfers_status? @default(draft)
+  created_by                                      Int?
+  created_at                                      DateTime          @default(now()) @db.Timestamp(0)
+  transfer_items                                  TransferItem[]
+  warehouses_transfers_from_warehouseTowarehouses Warehouse?        @relation("transfers_from_warehouseTowarehouses", fields: [from_warehouse], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "transfers_ibfk_1")
+  warehouses_transfers_to_warehouseTowarehouses   Warehouse?        @relation("transfers_to_warehouseTowarehouses", fields: [to_warehouse], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "transfers_ibfk_2")
+  users                                           User?             @relation(fields: [created_by], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "transfers_ibfk_3")
+
+  @@index([created_by], map: "created_by")
+  @@index([from_warehouse], map: "from_warehouse")
+  @@index([to_warehouse], map: "to_warehouse")
+  @@map("transfers")
+}
+
+model TransferItem {
+  id                                                Int       @id @default(autoincrement())
+  transfer_id                                       Int?
+  product_id                                        Int?
+  from_location                                     Int?
+  to_location                                       Int?
+  quantity                                          Int?
+  transfers                                         Transfer? @relation(fields: [transfer_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "transfer_items_ibfk_1")
+  products                                          Product?  @relation(fields: [product_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "transfer_items_ibfk_2")
+  locations_transfer_items_from_locationTolocations Location? @relation("transfer_items_from_locationTolocations", fields: [from_location], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "transfer_items_ibfk_3")
+  locations_transfer_items_to_locationTolocations   Location? @relation("transfer_items_to_locationTolocations", fields: [to_location], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "transfer_items_ibfk_4")
+
+  @@index([from_location], map: "from_location")
+  @@index([product_id], map: "product_id")
+  @@index([to_location], map: "to_location")
+  @@index([transfer_id], map: "transfer_id")
+  @@map("transfer_items")
+}
+
+model Adjustment {
+  id               Int              @id @default(autoincrement())
+  reference_no     String?          @db.VarChar(50)
+  warehouse_id     Int?
+  created_by       Int?
+  created_at       DateTime         @default(now()) @db.Timestamp(0)
+  adjustment_items AdjustmentItem[]
+  warehouses       Warehouse?       @relation(fields: [warehouse_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "adjustments_ibfk_1")
+  users            User?            @relation(fields: [created_by], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "adjustments_ibfk_2")
+
+  @@index([created_by], map: "created_by")
+  @@index([warehouse_id], map: "warehouse_id")
+  @@map("adjustments")
+}
+
+model AdjustmentItem {
+  id            Int         @id @default(autoincrement())
+  adjustment_id Int?
+  product_id    Int?
+  location_id   Int?
+  system_qty    Int?
+  actual_qty    Int?
+  difference    Int?
+  adjustments   Adjustment? @relation(fields: [adjustment_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "adjustment_items_ibfk_1")
+  products      Product?    @relation(fields: [product_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "adjustment_items_ibfk_2")
+  locations     Location?   @relation(fields: [location_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "adjustment_items_ibfk_3")
+
+  @@index([adjustment_id], map: "adjustment_id")
+  @@index([location_id], map: "location_id")
+  @@index([product_id], map: "product_id")
+  @@map("adjustment_items")
+}
+
+model StockBalance {
+  id          Int       @id @default(autoincrement())
+  product_id  Int?
+  location_id Int?
+  quantity    Int?      @default(0)
+  updated_at  DateTime  @default(now()) @db.Timestamp(0)
+  products    Product?  @relation(fields: [product_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "stock_balances_ibfk_1")
+  locations   Location? @relation(fields: [location_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "stock_balances_ibfk_2")
+
+  @@unique([product_id, location_id], map: "unique_product_location")
+  @@index([product_id, location_id], map: "idx_stock_product_location")
+  @@index([location_id], map: "location_id")
+  @@map("stock_balances")
+}
+
+model StockMove {
+  id              Int                    @id @default(autoincrement())
+  product_id      Int?
+  from_location   Int?
+  to_location     Int?
+  quantity        Int?
+  move_type       stock_moves_move_type?
+  reference_table String?                @db.VarChar(50)
+  reference_id    Int?
+  created_at      DateTime               @default(now()) @db.Timestamp(0)
+  products        Product?               @relation(fields: [product_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "stock_moves_ibfk_1")
+
+  @@index([product_id], map: "product_id")
+  @@map("stock_moves")
+}
+
+enum delivery_orders_status {
+  draft
+  waiting
+  ready
+  done
+  cancelled
+}
+
+enum receipts_status {
+  draft
+  waiting
+  ready
+  done
+  cancelled
+}
+
+enum transfers_status {
+  draft
+  waiting
+  ready
+  done
+  cancelled
+}
+
+enum stock_moves_move_type {
+  receipt
+  delivery
+  transfer
+  adjustment
+}
