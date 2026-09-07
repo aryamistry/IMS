@@ -47,7 +47,7 @@ export default function Header() {
           </div>
           <div>
             <p className="text-xs font-medium text-slate-700">{user?.name}</p>
-            <p className="text-[10px] text-slate-400">Admin</p>
+            <p className="text-[10px] text-slate-400 capitalize">{user?.role ?? 'User'}</p>
           </div>
         </div>
       </div>

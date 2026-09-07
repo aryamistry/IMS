@@ -14,6 +14,7 @@ export const login = async (req: Request, res: Response) => {
 
     const user = await prisma.user.findUnique({
       where: { email },
+      include: { roles: true },
     });
 
     if (!user || !user.password_hash) {
@@ -39,6 +40,7 @@ export const login = async (req: Request, res: Response) => {
         name: user.name,
         email: user.email,
         role_id: user.role_id,
+        role: user.roles?.role_name ?? null,
       },
     });
   } catch (error) {
@@ -87,6 +89,7 @@ export const register = async (req: Request, res: Response) => {
         password_hash: hashedPassword,
         role_id: defaultRole?.id ?? null,
       },
+      include: { roles: true },
     });
 
     const token = jwt.sign(
@@ -102,6 +105,7 @@ export const register = async (req: Request, res: Response) => {
         name: user.name,
         email: user.email,
         role_id: user.role_id,
+        role: user.roles?.role_name ?? null,
       },
     });
   } catch (error) {
@@ -121,20 +125,23 @@ export const me = async (req: AuthRequest, res: Response) => {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role_id: true,
-        is_active: true,
-      },
+      include: { roles: true },
     });
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
 
-    res.json({ user });
+    res.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role_id: user.role_id,
+        role: user.roles?.role_name ?? null,
+        is_active: user.is_active,
+      },
+    });
   } catch (error) {
     console.error("Me error:", error);
     res.status(500).json({ error: "Internal server error" });

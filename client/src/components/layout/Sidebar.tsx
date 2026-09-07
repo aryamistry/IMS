@@ -92,7 +92,7 @@ export default function Sidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-slate-200 text-xs font-medium truncate">{user?.name}</p>
-            <p className="text-slate-500 text-[10px] truncate">Admin</p>
+            <p className="text-slate-500 text-[10px] truncate capitalize">{user?.role ?? 'User'}</p>
           </div>
           <button
             onClick={handleLogout}
